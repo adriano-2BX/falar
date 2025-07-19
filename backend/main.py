@@ -6,14 +6,23 @@ from typing import List
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse  # <-- 1. IMPORTAÇÃO ADICIONADA
 
 logging.basicConfig(level=logging.INFO)
 app = FastAPI()
 
 
 # --- ATUALIZAÇÃO IMPORTANTE ---
-# Adicione este endpoint de Health Check logo no início
-# Ele é usado pela plataforma (EasyPanel) para verificar se a aplicação está online.
+# 2. ROTA EXPLÍCITA PARA A PÁGINA INICIAL E HEALTH CHECK
+# Esta rota captura os acessos à raiz "/" e responde diretamente com o arquivo index.html.
+# Isso garante uma resposta rápida e um status 200 OK para o health check do EasyPanel.
+@app.get("/", response_class=FileResponse)
+async def read_index():
+    return "frontend/index.html"
+
+
+# --- Endpoint de Health Check (Manter para garantir) ---
+# Mesmo que o EasyPanel não permita configurar, não custa nada manter esta rota.
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
@@ -22,7 +31,6 @@ async def health_check():
 # --- O resto do código permanece o mesmo ---
 
 class ConnectionManager:
-    # ... (código do ConnectionManager sem alterações)
     def __init__(self):
         self.active_connections: List[WebSocket] = []
     async def connect(self, websocket: WebSocket):
@@ -52,16 +60,13 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @app.post("/api/falar")
 async def api_falar(body: dict):
-    # ... (código da API sem alterações)
     texto = body.get("texto", "Nenhum texto fornecido")
     mensagem = {"action": "speak", "payload": texto}
     await manager.broadcast(json.dumps(mensagem))
     return {"status": "comando de fala enviado", "texto": texto}
 
-
 @app.post("/api/alerta")
 async def api_alerta(body: dict):
-    # ... (código da API sem alterações)
     mensagem_alerta = body.get("mensagem", "Alerta geral!")
     sirene_msg = {"action": "siren", "payload": "play"}
     await manager.broadcast(json.dumps(sirene_msg))
@@ -69,13 +74,14 @@ async def api_alerta(body: dict):
     await manager.broadcast(json.dumps(modal_msg))
     return {"status": "comando de alerta enviado", "mensagem": mensagem_alerta}
 
-
 @app.post("/api/parar_sirene")
 async def api_parar_sirene():
-    # ... (código da API sem alterações)
     mensagem = {"action": "siren", "payload": "stop"}
     await manager.broadcast(json.dumps(mensagem))
     return {"status": "comando para parar sirene enviado"}
 
 
-app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
+# --- 3. ATUALIZAÇÃO NO MOUNT ---
+# Agora o mount serve apenas para os *outros* arquivos da pasta, como sirene.mp3.
+# A rota "/" já foi capturada pela função read_index() acima.
+app.mount("/", StaticFiles(directory="frontend"), name="static")
