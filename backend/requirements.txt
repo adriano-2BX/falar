@@ -1,3 +1,5 @@
+# /falar/backend/requirements.txt
+
 fastapi
 uvicorn
 websockets
