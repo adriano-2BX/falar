@@ -3,162 +3,251 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>System Status Dashboard</title>
+    <title>Painel de Gerenciamento de Servidores</title>
     
+    <!-- Carrega o Tailwind CSS via Play CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
 
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
-    <script src="https://cdn.jsdelivr.net/npm/vue3-apexcharts"></script>
-
     <style type="text/tailwindcss">
-        /* Podemos adicionar estilos customizados e animações aqui */
+        /* Estilos e animações customizadas */
         @layer utilities {
-            .animate-pulse-slow {
-                animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-            }
-            @keyframes pulse-slow {
-                50% {
-                    opacity: .8;
-                }
+            .animate-pulse-fast {
+                animation: pulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
             }
         }
     </style>
 </head>
-<body class="bg-gray-900">
+<body class="bg-gray-800 text-gray-300 font-sans flex">
 
-    <div id="app" class="min-h-screen p-4 sm:p-8">
-        
-        <h1 class="text-4xl font-bold text-center text-gray-100 mb-8 tracking-wider">
-            SYSTEM STATUS DASHBOARD
-        </h1>
-
-        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            <server-card v-for="server in servers" :key="server.id" :server="server"></server-card>
+    <!-- ================================================== -->
+    <!-- BARRA LATERAL (SIDEBAR)                            -->
+    <!-- ================================================== -->
+    <aside class="w-64 bg-gray-900 p-4 flex flex-col flex-shrink-0 h-screen sticky top-0">
+        <div class="text-2xl font-bold text-white mb-8 flex items-center gap-3">
+            <svg class="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+            Painel SSE
         </div>
+        <nav class="flex flex-col gap-2">
+            <a href="#" class="flex items-center gap-3 px-4 py-2 rounded-md text-white bg-green-500/20 border border-green-500/50">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 16v-2m0-10v10M12 6a2 2 0 100-4 2 2 0 000 4zm0 16a2 2 0 100-4 2 2 0 000 4zM6 12H4m16 0h-2m-10 0h10M6 12a2 2 0 100-4 2 2 0 000 4zm12 0a2 2 0 100-4 2 2 0 000 4z"></path></svg>
+                <span>Service Management</span>
+            </a>
+            <a href="#" class="flex items-center gap-3 px-4 py-2 rounded-md hover:bg-gray-700 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                <span>User Management</span>
+            </a>
+            <a href="#" class="flex items-center gap-3 px-4 py-2 rounded-md hover:bg-gray-700 transition-colors">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4M4 7v10M12 11v10M12 11a4 4 0 000-8M8 7a4 4 0 014-4"></path></svg>
+                <span>MySQL Manager</span>
+            </a>
+        </nav>
+        <div class="mt-auto text-xs text-gray-500">
+            <p>Status: <span id="connection-status" class="text-red-500">Desconectado</span></p>
+            <p>&copy; 2025 Seu Nome</p>
+        </div>
+    </aside>
 
-    </div>
+    <!-- ================================================== -->
+    <!-- CONTEÚDO PRINCIPAL                                 -->
+    <!-- ================================================== -->
+    <main class="flex-1 p-8">
+        <header class="mb-8">
+            <h1 class="text-3xl font-bold text-white">Gerenciador de Servidores</h1>
+            <p class="text-gray-400">Visão geral e funções do seu ambiente.</p>
+        </header>
 
-    <script>
-        // Desestruturamos as funções que vamos usar do objeto global 'Vue'
-        const { createApp, ref, onMounted, computed } = Vue;
-        
-        // Criamos nossa aplicação Vue
-        const app = createApp({
-            setup() {
-                // 'ref' cria uma variável reativa. Qualquer mudança aqui, a UI atualiza automaticamente.
-                const servers = ref([]);
-
-                // Inicializa o painel com 20 servidores em estado padrão
-                for (let i = 1; i <= 20; i++) {
-                    servers.value.push({
-                        id: i,
-                        name: `SRV-${String(i).padStart(2, '0')}`,
-                        status: 'normal',
-                        cpu_load: 0,
-                        ram_usage: 0,
-                        disk_space: 0,
-                        uptime: "initializing...",
-                        last_error: null
-                    });
-                }
-
-                // 'onMounted' é executado quando a aplicação é carregada na tela
-                onMounted(() => {
-                    // A URL deve apontar para o seu backend FastAPI
-                    // Se estiver testando localmente, use http://localhost:8000/stream
-                    const eventSource = new EventSource('/stream');
-
-                    eventSource.onmessage = (event) => {
-                        console.log("SSE Event Received:", event.data);
-                        const data = JSON.parse(event.data);
-
-                        if (data.action === 'update_server') {
-                            const serverIndex = servers.value.findIndex(s => s.id === data.payload.id);
-                            if (serverIndex !== -1) {
-                                // Atualiza os dados do servidor encontrado. Vue cuida do resto!
-                                servers.value[serverIndex] = data.payload;
-                            }
-                        }
-                    };
-
-                    eventSource.onerror = (err) => {
-                        console.error("EventSource failed:", err);
-                    };
-                });
-
-                // Expomos a variável 'servers' para o template HTML
-                return {
-                    servers
-                };
-            }
-        });
-        
-        // --- DEFINIÇÃO DO COMPONENTE 'ServerCard' ---
-        app.component('ServerCard', {
-            // Este componente usa o 'vue3-apexcharts' que carregamos via CDN
-            components: {
-                apexchart: VueApexCharts,
-            },
-            props: ['server'],
-            setup(props) {
-                // Lógica para mudar a classe CSS principal do card
-                const cardClasses = computed(() => ({
-                    'bg-red-500/80 border-red-400 animate-pulse': props.server.status === 'down',
-                    'bg-yellow-500/80 border-yellow-400 animate-pulse-slow': props.server.status === 'overloaded',
-                    'bg-gray-800/60 border-gray-700': props.server.status === 'normal'
-                }));
+        <!-- Grid principal de widgets -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- Coluna Esquerda e Central (2/3 da largura) -->
+            <div class="lg:col-span-2 grid grid-cols-1 gap-8">
                 
-                // Opções para o gráfico
-                const chartOptions = computed(() => ({ /* ... opções do gráfico ... */ }));
-                const series = computed(() => [props.server.cpu_load || 0]);
+                <!-- Widget: Painel de Servidores -->
+                <div id="dashboard-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <!-- Os cards dos servidores serão inseridos aqui pelo JavaScript -->
+                </div>
 
-                return { cardClasses, chartOptions, series };
-            },
-            // O template HTML do nosso componente
-            template: `
-                <div class="p-4 rounded-xl shadow-lg text-white transform hover:-translate-y-1 hover:shadow-2xl transition-all duration-300 border backdrop-blur-sm"
-                    :class="cardClasses">
-                    
-                    <div class="flex justify-between items-center mb-3">
-                        <h3 class="font-bold text-lg">{{ server.name }}</h3>
-                        <span class="text-xs font-mono px-2 py-1 rounded"
-                            :class="{
-                                'bg-green-500/20 text-green-300': server.status === 'normal',
-                                'bg-yellow-500/20 text-yellow-300': server.status === 'overloaded',
-                                'bg-red-500/20 text-red-300': server.status === 'down'
-                            }">
-                            {{ server.status.toUpperCase() }}
-                        </span>
-                    </div>
-
-                    <div class="text-center my-4 opacity-90">
-                        <apexchart type="radialBar" height="130" :options="chartOptions" :series="series"></apexchart>
-                        <div class="text-center -mt-4 text-xs font-semibold tracking-wider">CPU LOAD</div>
-                    </div>
-                    
-                    <div class="text-xs space-y-1 opacity-80 font-mono">
-                        <div class="flex justify-between border-b border-gray-700/50 py-1">
-                            <span>RAM</span> <span>{{ server.ram_usage || 0 }}%</span>
+                <!-- Widget: Funções -->
+                <div class="bg-gray-900/50 p-6 rounded-lg">
+                    <h2 class="text-xl font-bold text-white mb-4">Funções</h2>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+                        <!-- Exemplo de um botão de função -->
+                        <div class="bg-gray-800 p-4 rounded-md hover:bg-gray-700 transition-colors cursor-pointer">
+                            <svg class="w-10 h-10 mx-auto mb-2 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path></svg>
+                            <span class="text-sm">Console</span>
                         </div>
-                        <div class="flex justify-between border-b border-gray-700/50 py-1">
-                            <span>Disco</span> <span>{{ server.disk_space || 0 }}%</span>
+                        <div class="bg-gray-800 p-4 rounded-md hover:bg-gray-700 transition-colors cursor-pointer">
+                            <svg class="w-10 h-10 mx-auto mb-2 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                            <span class="text-sm">Upload</span>
                         </div>
-                        <div class="flex justify-between pt-1">
-                            <span>Uptime</span> <span>{{ server.uptime }}</span>
+                        <div class="bg-gray-800 p-4 rounded-md hover:bg-gray-700 transition-colors cursor-pointer">
+                            <svg class="w-10 h-10 mx-auto mb-2 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+                            <span class="text-sm">Log Viewer</span>
                         </div>
-                    </div>
-
-                    <div v-if="server.last_error" class="mt-4 text-center bg-red-900/50 p-2 rounded-lg text-xs font-mono">
-                        ⚠️ {{ server.last_error }}
+                        <div class="bg-gray-800 p-4 rounded-md hover:bg-gray-700 transition-colors cursor-pointer">
+                            <svg class="w-10 h-10 mx-auto mb-2 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            <span class="text-sm">Fast Downloads</span>
+                        </div>
                     </div>
                 </div>
-            `
-        });
-        
-        // Monta a aplicação Vue na div #app
-        app.mount('#app');
+            </div>
 
+            <!-- Coluna Direita (1/3 da largura) -->
+            <div class="lg:col-span-1 grid grid-cols-1 gap-8">
+                <!-- Widget: Stats (será preenchido com dados agregados, se houver) -->
+                <div class="bg-gray-900/50 p-6 rounded-lg">
+                    <h2 class="text-xl font-bold text-white mb-4">Stats Globais</h2>
+                    <!-- Conteúdo de stats aqui -->
+                    <p class="text-sm text-gray-400">Em desenvolvimento...</p>
+                </div>
+                <!-- Widget: Quick Links -->
+                <div class="bg-gray-900/50 p-6 rounded-lg">
+                    <h2 class="text-xl font-bold text-white mb-4">Links Rápidos</h2>
+                    <div class="flex flex-col gap-2">
+                        <a href="#" class="block bg-gray-800 p-3 rounded-md hover:bg-gray-700 transition-colors">Base de Conhecimento</a>
+                        <a href="#" class="block bg-gray-800 p-3 rounded-md hover:bg-gray-700 transition-colors">Abrir Ticket de Suporte</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- ================================================== -->
+    <!-- TEMPLATE DO CARD DE SERVIDOR                       -->
+    <!-- ================================================== -->
+    <template id="server-card-template">
+        <div class="server-card bg-gray-900/50 p-4 rounded-lg border border-gray-700 transition-all duration-300">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="server-name font-bold text-white">SRV-00</h3>
+                <span class="status-badge text-xs font-semibold px-2 py-1 rounded-full">NORMAL</span>
+            </div>
+            <div class="space-y-2 text-sm">
+                <!-- CPU -->
+                <div>
+                    <div class="flex justify-between text-xs text-gray-400 mb-1"><span>CPU</span><span class="cpu-text">0%</span></div>
+                    <div class="w-full bg-gray-700 rounded-full h-2">
+                        <div class="cpu-bar bg-green-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+                <!-- RAM -->
+                <div>
+                    <div class="flex justify-between text-xs text-gray-400 mb-1"><span>RAM</span><span class="ram-text">0%</span></div>
+                    <div class="w-full bg-gray-700 rounded-full h-2">
+                        <div class="ram-bar bg-green-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="uptime-text mt-3 pt-3 border-t border-gray-700/50 text-xs text-gray-500">
+                Uptime: N/A
+            </div>
+            <div class="error-text mt-2 text-center bg-red-900/50 p-2 rounded-md text-xs font-mono text-red-300 hidden">
+                <!-- Mensagem de erro aqui -->
+            </div>
+        </div>
+    </template>
+
+    <!-- ================================================== -->
+    <!-- SCRIPT DA APLICAÇÃO                              -->
+    <!-- ================================================== -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dashboardGrid = document.getElementById('dashboard-grid');
+            const cardTemplate = document.getElementById('server-card-template');
+            const connectionStatusEl = document.getElementById('connection-status');
+            const TOTAL_SERVERS = 20;
+
+            // Função para obter a cor da barra de progresso com base no valor
+            const getProgressBarColor = (value) => {
+                if (value > 90) return 'bg-red-500';
+                if (value > 75) return 'bg-yellow-500';
+                return 'bg-green-500';
+            };
+
+            // Função para atualizar um único card no DOM
+            const updateServerCard = (cardElement, data) => {
+                // Atualiza o nome
+                cardElement.querySelector('.server-name').textContent = data.name;
+
+                // Atualiza o status (cor do card e do badge)
+                const badge = cardElement.querySelector('.status-badge');
+                badge.textContent = data.status.toUpperCase();
+                
+                // Limpa classes antigas
+                cardElement.classList.remove('border-green-500', 'border-yellow-500', 'border-red-500', 'animate-pulse-fast');
+                badge.classList.remove('bg-green-500/30', 'text-green-300', 'bg-yellow-500/30', 'text-yellow-300', 'bg-red-500/30', 'text-red-300');
+
+                if (data.status === 'down') {
+                    cardElement.classList.add('border-red-500', 'animate-pulse-fast');
+                    badge.classList.add('bg-red-500/30', 'text-red-300');
+                } else if (data.status === 'overloaded') {
+                    cardElement.classList.add('border-yellow-500', 'animate-pulse-fast');
+                    badge.classList.add('bg-yellow-500/30', 'text-yellow-300');
+                } else {
+                    cardElement.classList.add('border-green-500');
+                    badge.classList.add('bg-green-500/30', 'text-green-300');
+                }
+                
+                // Atualiza as barras de progresso
+                const cpuText = cardElement.querySelector('.cpu-text');
+                const cpuBar = cardElement.querySelector('.cpu-bar');
+                cpuText.textContent = `${data.cpu_load || 0}%`;
+                cpuBar.style.width = `${data.cpu_load || 0}%`;
+                cpuBar.className = `cpu-bar h-2 rounded-full transition-all duration-500 ${getProgressBarColor(data.cpu_load)}`;
+                
+                const ramText = cardElement.querySelector('.ram-text');
+                const ramBar = cardElement.querySelector('.ram-bar');
+                ramText.textContent = `${data.ram_usage || 0}%`;
+                ramBar.style.width = `${data.ram_usage || 0}%`;
+                ramBar.className = `ram-bar h-2 rounded-full transition-all duration-500 ${getProgressBarColor(data.ram_usage)}`;
+
+                // Atualiza o uptime
+                cardElement.querySelector('.uptime-text').textContent = `Uptime: ${data.uptime}`;
+
+                // Atualiza o erro
+                const errorEl = cardElement.querySelector('.error-text');
+                if (data.last_error) {
+                    errorEl.textContent = `⚠️ ${data.last_error}`;
+                    errorEl.classList.remove('hidden');
+                } else {
+                    errorEl.classList.add('hidden');
+                }
+            };
+
+            // Inicializa o painel com cards vazios
+            for (let i = 1; i <= TOTAL_SERVERS; i++) {
+                const cardClone = cardTemplate.content.cloneNode(true);
+                const cardElement = cardClone.querySelector('.server-card');
+                cardElement.id = `server-${i}`; // ID único para cada card
+                cardElement.querySelector('.server-name').textContent = `SRV-${String(i).padStart(2, '0')}`;
+                dashboardGrid.appendChild(cardClone);
+            }
+
+            // Conecta ao backend para receber atualizações
+            const eventSource = new EventSource('/stream');
+
+            eventSource.onopen = () => {
+                console.log("Conexão SSE estabelecida.");
+                connectionStatusEl.textContent = 'Conectado';
+                connectionStatusEl.className = 'text-green-400 font-bold';
+            };
+
+            eventSource.onerror = () => {
+                console.error("Conexão SSE perdida.");
+                connectionStatusEl.textContent = 'Desconectado';
+                connectionStatusEl.className = 'text-red-500 font-bold';
+            };
+
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.action === 'update_server') {
+                    const serverId = data.payload.id;
+                    const cardElement = document.getElementById(`server-${serverId}`);
+                    if (cardElement) {
+                        updateServerCard(cardElement, data.payload);
+                    }
+                }
+            };
+        });
     </script>
 </body>
 </html>
