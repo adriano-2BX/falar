@@ -9,18 +9,20 @@
         #status-box { padding: 15px; border-radius: 5px; font-weight: bold; text-align: center; margin-bottom: 20px; }
         .status-disconnected { background-color: #ffebee; color: #c62828; }
         .status-connected { background-color: #e8f5e9; color: #2e7d32; }
+        #init-overlay { position: fixed; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; top: 0; left: 0; background-color: rgba(0,0,0,0.7); z-index: 10; }
+        #init-button { padding: 20px 40px; font-size: 1.5em; cursor: pointer; }
         #overlay { position: fixed; display: none; width: 100%; height: 100%; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 2; cursor: pointer; }
         #alert-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: #fff; padding: 30px; border-radius: 10px; z-index: 3; text-align: center; border: 5px solid red; }
-        #alert-modal h2 { margin-top: 0; color: red; }
-        #alert-modal button { margin-top: 20px; padding: 10px 20px; }
     </style>
 </head>
 <body>
-    <h1>Painel de Alerta</h1>
-    <div id="status-box">Status: <span id="status">Iniciando...</span></div>
+    <div id="init-overlay">
+        <button id="init-button">Iniciar Sistema</button>
+    </div>
 
+    <h1>Painel de Alerta</h1>
+    <div id="status-box">Status: <span id="status">Aguardando início...</span></div>
     <audio id="siren-sound" src="/static/sirene.mp3" loop></audio>
-    
     <div id="overlay"></div>
     <div id="alert-modal">
         <h2>ALERTA!</h2>
@@ -29,51 +31,83 @@
     </div>
 
     <script>
-        const statusEl = document.getElementById('status');
-        const statusBox = document.getElementById('status-box');
-        
-        console.log("Iniciando conexão com Server-Sent Events...");
-        
-        // --- ATUALIZAÇÃO IMPORTANTE AQUI ---
-        // Trocamos WebSocket por EventSource
-        const eventSource = new EventSource("/stream");
+        // --- VARIÁVEL GLOBAL PARA GUARDAR A VOZ ---
+        let ptBrFemaleVoice = null;
 
-        // Evento quando a conexão é aberta com sucesso
-        eventSource.onopen = () => {
-            console.log("Conexão SSE estabelecida.");
-            statusBox.className = 'status-box status-connected';
-            statusEl.textContent = "Conectado";
-        };
+        // --- FUNÇÃO PARA CARREGAR E SELECIONAR A VOZ ---
+        function loadAndSetVoice() {
+            const allVoices = speechSynthesis.getVoices();
+            let highQualityVoice = null;
+            let standardVoice = null;
 
-        // Evento quando uma nova mensagem chega do servidor
-        eventSource.onmessage = (event) => {
-            // A mensagem já vem em 'event.data'
-            const data = JSON.parse(event.data);
-            console.log("Comando SSE recebido:", data);
-
-            switch (data.action) {
-                case 'speak':
-                    falar(data.payload);
-                    break;
-                case 'alert':
-                    mostrarAlerta(data.payload);
-                    break;
-                case 'siren':
-                    if (data.payload === 'play') tocarSirene();
-                    else if (data.payload === 'stop') pararSirene();
-                    break;
+            for (let voice of allVoices) {
+                if (voice.lang === 'pt-BR' && voice.gender === 'female') {
+                    // Dá preferência para vozes de alta qualidade
+                    if (voice.name.includes('Google') || voice.name.includes('Microsoft')) {
+                        highQualityVoice = voice;
+                        break; // Encontrou a melhor, pode parar de procurar
+                    }
+                    // Guarda a primeira voz feminina que encontrar como padrão
+                    if (!standardVoice) {
+                        standardVoice = voice;
+                    }
+                }
             }
-        };
+            
+            ptBrFemaleVoice = highQualityVoice || standardVoice;
 
-        // Evento se ocorrer um erro. O navegador tentará reconectar automaticamente.
-        eventSource.onerror = (err) => {
-            console.error("Erro no EventSource:", err);
-            statusBox.className = 'status-box status-disconnected';
-            statusEl.textContent = "Conexão perdida. Tentando reconectar...";
-        };
+            if (ptBrFemaleVoice) {
+                console.log("Voz selecionada:", ptBrFemaleVoice.name);
+            } else {
+                console.warn("Nenhuma voz feminina em pt-BR encontrada. Usando a voz padrão.");
+            }
+        }
         
-        // As funções de ação não mudam
-        function falar(texto) { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(texto); u.lang = 'pt-BR'; window.speechSynthesis.speak(u); } }
+        // --- FUNÇÃO DE FALA ATUALIZADA ---
+        function falar(texto) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(texto);
+                utterance.lang = 'pt-BR';
+                
+                // Usa a voz que selecionamos, se ela foi encontrada
+                if (ptBrFemaleVoice) {
+                    utterance.voice = ptBrFemaleVoice;
+                }
+                
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+        
+        // --- LÓGICA DE INICIALIZAÇÃO E CONEXÃO ---
+        const initButton = document.getElementById('init-button');
+        initButton.addEventListener('click', startSystem);
+
+        // A lista de vozes pode demorar a carregar. Este evento é disparado quando ela está pronta.
+        speechSynthesis.onvoiceschanged = loadAndSetVoice;
+        // Chama uma vez no início caso as vozes já estejam carregadas.
+        loadAndSetVoice();
+
+        function startSystem() {
+            document.getElementById('init-overlay').style.display = 'none';
+            // Chama de novo para garantir que as vozes foram carregadas após a interação
+            loadAndSetVoice();
+            falar(''); // "Acorda" a API de fala
+
+            const eventSource = new EventSource("/stream");
+            // ... (o resto do código do EventSource é igual)
+            eventSource.onopen = () => { document.getElementById('status-box').className = 'status-box status-connected'; document.getElementById('status').textContent = "Conectado"; };
+            eventSource.onerror = () => { document.getElementById('status-box').className = 'status-box status-disconnected'; document.getElementById('status').textContent = "Conexão perdida..."; };
+            eventSource.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                switch (data.action) {
+                    case 'speak': falar(data.payload); break;
+                    case 'alert': mostrarAlerta(data.payload); break;
+                    case 'siren': if (data.payload === 'play') tocarSirene(); else if (data.payload === 'stop') pararSirene(); break;
+                }
+            };
+        }
+
+        // Funções auxiliares (sem alterações)
         function mostrarAlerta(mensagem) { document.getElementById('alert-message').textContent = mensagem; document.getElementById('overlay').style.display = 'block'; document.getElementById('alert-modal').style.display = 'block'; }
         function fecharAlerta() { document.getElementById('overlay').style.display = 'none'; document.getElementById('alert-modal').style.display = 'none'; pararSirene(); }
         function tocarSirene() { document.getElementById('siren-sound').play().catch(e => console.error("Erro ao tocar sirene:", e)); }
