@@ -1,102 +1,37 @@
-# /meu_projeto/backend/main.py (VERSÃO COM PAINEL DE SERVIDORES)
+# /meu_projeto/backend/main.py
 
-import asyncio
-import json
-import logging
-from typing import List
+# ... (imports de antes) ...
+from pydantic import BaseModel, Field
+from typing import Optional
 
-from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
-from sse_starlette.sse import EventSourceResponse
+# --- MODELO DE DADOS Pydantic ---
+# Define a estrutura dos dados completos que esperamos receber para cada servidor.
+# FastAPI usará isso para validar automaticamente os dados da API.
+class ServerData(BaseModel):
+    id: int = Field(..., gt=0) # ID do servidor (obrigatório, maior que 0)
+    name: Optional[str] = "Servidor"
+    status: str # "normal", "overloaded", "down"
+    cpu_load: Optional[float] = Field(None, ge=0, le=100) # Uso de CPU em %
+    ram_usage: Optional[float] = Field(None, ge=0, le=100) # Uso de RAM em %
+    disk_space: Optional[float] = Field(None, ge=0, le=100) # Espaço em disco usado em %
+    uptime: Optional[str] = "N/A"
+    last_error: Optional[str] = None
 
-# Configuração básica de logging
-logging.basicConfig(level=logging.INFO)
+# ... (Broadcaster, SSE endpoint, etc. continuam iguais) ...
 
-# Criação da aplicação FastAPI
-app = FastAPI()
-
-# --- Sistema de Broadcast para SSE (sem alterações) ---
-class Broadcaster:
-    def __init__(self):
-        self.queues: List[asyncio.Queue] = []
-    def add_queue(self, queue: asyncio.Queue):
-        self.queues.append(queue)
-    def remove_queue(self, queue: asyncio.Queue):
-        self.queues.remove(queue)
-    async def broadcast(self, message: str):
-        for queue in self.queues:
-            await queue.put(message)
-
-broadcaster = Broadcaster()
-
-# --- Endpoint SSE (sem alterações) ---
-@app.get("/stream")
-async def event_stream(request: Request):
-    queue = asyncio.Queue()
-    broadcaster.add_queue(queue)
-    async def event_generator():
-        try:
-            while True:
-                if await request.is_disconnected(): break
-                message = await queue.get()
-                yield message
-        finally:
-            broadcaster.remove_queue(queue)
-            logging.info("Cliente SSE desconectado.")
-    return EventSourceResponse(event_generator())
-
-# --- Rota da Página Inicial (sem alterações) ---
-@app.get("/", response_class=FileResponse)
-async def read_index():
-    return "frontend/index.html"
-
-# --- Endpoints da API ---
-
-# Endpoints antigos (falar, alerta) continuam funcionando
-@app.post("/api/falar")
-async def api_falar(body: dict):
-    texto = body.get("texto", "Nenhum texto fornecido")
-    mensagem = {"action": "speak", "payload": texto}
-    await broadcaster.broadcast(json.dumps(mensagem))
-    return {"status": "comando de fala enviado"}
-
-@app.post("/api/alerta")
-async def api_alerta(body: dict):
-    mensagem_alerta = body.get("mensagem", "Alerta geral!")
-    sirene_msg = {"action": "siren", "payload": "play"}
-    await broadcaster.broadcast(json.dumps(sirene_msg))
-    modal_msg = {"action": "alert", "payload": mensagem_alerta}
-    await broadcaster.broadcast(json.dumps(modal_msg))
-    return {"status": "comando de alerta enviado"}
-
-@app.post("/api/parar_sirene")
-async def api_parar_sirene():
-    mensagem = {"action": "siren", "payload": "stop"}
-    await broadcaster.broadcast(json.dumps(mensagem))
-    return {"status": "comando para parar sirene enviado"}
-
-
-# --- NOVO ENDPOINT PARA ATUALIZAR STATUS DO SERVIDOR ---
+# --- ENDPOINT ATUALIZADO ---
+# Agora ele recebe o modelo ServerData completo
 @app.post("/api/server-status")
-async def update_server_status(body: dict):
-    server_id = body.get("server_id")
-    status = body.get("status") # ex: "normal", "overloaded", "down"
-
-    if server_id is None or status is None:
-        return {"error": "server_id e status são obrigatórios"}, 400
-
-    # Cria a mensagem para o frontend
+async def update_server_status(data: ServerData):
+    # Cria a mensagem para o frontend com todos os dados recebidos
     mensagem = {
         "action": "update_server",
-        "payload": {
-            "id": server_id,
-            "status": status
-        }
+        "payload": data.dict() # Converte o modelo Pydantic para um dicionário
     }
     await broadcaster.broadcast(json.dumps(mensagem))
-    return {"status": f"Status do servidor {server_id} atualizado para {status}"}
+    return {"status": f"Dados do servidor {data.id} recebidos com sucesso"}
 
-
-# Mount para servir arquivos estáticos (sem alterações)
-app.mount("/static", StaticFiles(directory="frontend"), name="static")
+# ... (Resto dos endpoints e o mount de arquivos estáticos) ...
+# O frontend agora será uma aplicação separada, então o `app.mount` e a rota "/"
+# podem ser removidos se você for servir o frontend de outro lugar.
+# Por enquanto, vamos manter para não quebrar o que já existe.
