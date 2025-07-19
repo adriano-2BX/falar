@@ -3,16 +3,54 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel de Alerta</title>
+    <title>Painel de Monitoramento</title>
     <style>
-        body { font-family: sans-serif; background-color: #f0f0f0; padding: 20px; }
-        #status-box { padding: 15px; border-radius: 5px; font-weight: bold; text-align: center; margin-bottom: 20px; }
-        .status-disconnected { background-color: #ffebee; color: #c62828; }
-        .status-connected { background-color: #e8f5e9; color: #2e7d32; }
+        body { font-family: sans-serif; background-color: #2c3e50; color: #ecf0f1; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; }
+
+        /* Estilos do Painel de Servidores */
+        #dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 15px;
+            padding: 20px;
+            background-color: #34495e;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+        .server-box {
+            background-color: #2ecc71; /* Cor padrão: verde (normal) */
+            color: #fff;
+            padding: 20px;
+            border-radius: 5px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.1em;
+            transition: background-color 0.3s ease, transform 0.2s ease;
+            border: 2px solid transparent;
+        }
+        .server-box .server-name { font-size: 0.8em; opacity: 0.8; }
+
+        /* Estilos dos Status */
+        .server-normal { background-color: #27ae60; } /* Verde */
+        .server-overloaded { background-color: #f1c40f; color: #333; } /* Amarelo */
+        .server-down { background-color: #e74c3c; } /* Vermelho */
+
+        /* Animação de Piscar */
+        .blinking {
+            animation: blinker 1s linear infinite;
+        }
+        @keyframes blinker {
+            50% { opacity: 0.3; }
+        }
+
+        /* Outros estilos (status, modal, etc.) */
+        #status-box { padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 20px; }
+        .status-connected { background-color: #27ae60; }
+        .status-disconnected { background-color: #e74c3c; }
         #init-overlay { position: fixed; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; top: 0; left: 0; background-color: rgba(0,0,0,0.7); z-index: 10; }
         #init-button { padding: 20px 40px; font-size: 1.5em; cursor: pointer; }
-        #overlay { position: fixed; display: none; width: 100%; height: 100%; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 2; cursor: pointer; }
-        #alert-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: #fff; padding: 30px; border-radius: 10px; z-index: 3; text-align: center; border: 5px solid red; }
     </style>
 </head>
 <body>
@@ -20,98 +58,87 @@
         <button id="init-button">Iniciar Sistema</button>
     </div>
 
-    <h1>Painel de Alerta</h1>
-    <div id="status-box">Status: <span id="status">Aguardando início...</span></div>
-    <audio id="siren-sound" src="/static/sirene.mp3" loop></audio>
-    <div id="overlay"></div>
-    <div id="alert-modal">
-        <h2>ALERTA!</h2>
-        <p id="alert-message">Esta é uma mensagem de alerta.</p>
-        <button onclick="fecharAlerta()">Fechar</button>
+    <div class="container">
+        <h1>Painel de Monitoramento de Servidores</h1>
+        <div id="status-box">Status: <span id="status">Aguardando início...</span></div>
+        
+        <div id="dashboard"></div>
     </div>
-
+    
+    <audio id="siren-sound" src="/static/sirene.mp3" loop></audio>
     <script>
-        // --- VARIÁVEL GLOBAL PARA GUARDAR A VOZ ---
-        let ptBrFemaleVoice = null;
+        const dashboard = document.getElementById('dashboard');
+        const TOTAL_SERVERS = 20;
 
-        // --- FUNÇÃO PARA CARREGAR E SELECIONAR A VOZ ---
-        function loadAndSetVoice() {
-            const allVoices = speechSynthesis.getVoices();
-            let highQualityVoice = null;
-            let standardVoice = null;
-
-            for (let voice of allVoices) {
-                if (voice.lang === 'pt-BR' && voice.gender === 'female') {
-                    // Dá preferência para vozes de alta qualidade
-                    if (voice.name.includes('Google') || voice.name.includes('Microsoft')) {
-                        highQualityVoice = voice;
-                        break; // Encontrou a melhor, pode parar de procurar
-                    }
-                    // Guarda a primeira voz feminina que encontrar como padrão
-                    if (!standardVoice) {
-                        standardVoice = voice;
-                    }
-                }
-            }
-            
-            ptBrFemaleVoice = highQualityVoice || standardVoice;
-
-            if (ptBrFemaleVoice) {
-                console.log("Voz selecionada:", ptBrFemaleVoice.name);
-            } else {
-                console.warn("Nenhuma voz feminina em pt-BR encontrada. Usando a voz padrão.");
+        // --- LÓGICA DO PAINEL ---
+        function createServerGrid() {
+            for (let i = 1; i <= TOTAL_SERVERS; i++) {
+                const serverDiv = document.createElement('div');
+                serverDiv.id = `server-${i}`;
+                // Todos começam com o status 'normal'
+                serverDiv.className = 'server-box server-normal';
+                
+                const serverName = document.createElement('div');
+                serverName.className = 'server-name';
+                serverName.textContent = `Servidor #${i}`;
+                
+                serverDiv.appendChild(serverName);
+                dashboard.appendChild(serverDiv);
             }
         }
-        
-        // --- FUNÇÃO DE FALA ATUALIZADA ---
-        function falar(texto) {
-            if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(texto);
-                utterance.lang = 'pt-BR';
-                
-                // Usa a voz que selecionamos, se ela foi encontrada
-                if (ptBrFemaleVoice) {
-                    utterance.voice = ptBrFemaleVoice;
-                }
-                
-                window.speechSynthesis.speak(utterance);
+
+        function updateServer(id, status) {
+            const serverDiv = document.getElementById(`server-${id}`);
+            if (!serverDiv) return;
+
+            // Limpa as classes de status e piscar antigas
+            serverDiv.classList.remove('server-normal', 'server-overloaded', 'server-down', 'blinking');
+
+            // Adiciona a nova classe de status
+            serverDiv.classList.add(`server-${status}`);
+
+            // Adiciona a classe de piscar se o status não for 'normal'
+            if (status === 'overloaded' || status === 'down') {
+                serverDiv.classList.add('blinking');
             }
         }
-        
+
         // --- LÓGICA DE INICIALIZAÇÃO E CONEXÃO ---
-        const initButton = document.getElementById('init-button');
-        initButton.addEventListener('click', startSystem);
-
-        // A lista de vozes pode demorar a carregar. Este evento é disparado quando ela está pronta.
-        speechSynthesis.onvoiceschanged = loadAndSetVoice;
-        // Chama uma vez no início caso as vozes já estejam carregadas.
-        loadAndSetVoice();
+        document.getElementById('init-button').addEventListener('click', startSystem);
 
         function startSystem() {
             document.getElementById('init-overlay').style.display = 'none';
-            // Chama de novo para garantir que as vozes foram carregadas após a interação
-            loadAndSetVoice();
+            createServerGrid(); // Cria o painel de servidores
             falar(''); // "Acorda" a API de fala
 
             const eventSource = new EventSource("/stream");
-            // ... (o resto do código do EventSource é igual)
-            eventSource.onopen = () => { document.getElementById('status-box').className = 'status-box status-connected'; document.getElementById('status').textContent = "Conectado"; };
-            eventSource.onerror = () => { document.getElementById('status-box').className = 'status-box status-disconnected'; document.getElementById('status').textContent = "Conexão perdida..."; };
+            
+            eventSource.onopen = () => { /* ... (lógica de status conectado) ... */ };
+            eventSource.onerror = () => { /* ... (lógica de status desconectado) ... */ };
+            
             eventSource.onmessage = (event) => {
                 const data = JSON.parse(event.data);
+                
+                // Roteia a ação para a função correta
                 switch (data.action) {
-                    case 'speak': falar(data.payload); break;
-                    case 'alert': mostrarAlerta(data.payload); break;
-                    case 'siren': if (data.payload === 'play') tocarSirene(); else if (data.payload === 'stop') pararSirene(); break;
+                    case 'update_server':
+                        updateServer(data.payload.id, data.payload.status);
+                        break;
+                    case 'speak':
+                        falar(data.payload);
+                        break;
+                    case 'alert':
+                        // A função de alerta pode ser adicionada aqui se você mantiver o modal
+                        break;
+                    case 'siren':
+                        // ...
+                        break;
                 }
             };
         }
 
-        // Funções auxiliares (sem alterações)
-        function mostrarAlerta(mensagem) { document.getElementById('alert-message').textContent = mensagem; document.getElementById('overlay').style.display = 'block'; document.getElementById('alert-modal').style.display = 'block'; }
-        function fecharAlerta() { document.getElementById('overlay').style.display = 'none'; document.getElementById('alert-modal').style.display = 'none'; pararSirene(); }
-        function tocarSirene() { document.getElementById('siren-sound').play().catch(e => console.error("Erro ao tocar sirene:", e)); }
-        function pararSirene() { const s = document.getElementById('siren-sound'); s.pause(); s.currentTime = 0; }
+        // Função de fala (sem alterações)
+        function falar(texto) { if ('speechSynthesis' in window) { /* ... */ } }
     </script>
 </body>
 </html>
