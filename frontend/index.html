@@ -5,8 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Painel de Alerta</title>
     <style>
-        /* Estilos básicos para o modal e overlay */
-        body { font-family: sans-serif; background-color: #f0f0f0; }
+        body { font-family: sans-serif; background-color: #f0f0f0; padding: 20px; }
+        #status-box { padding: 15px; border-radius: 5px; font-weight: bold; text-align: center; margin-bottom: 20px; }
+        .status-disconnected { background-color: #ffebee; color: #c62828; }
+        .status-connected { background-color: #e8f5e9; color: #2e7d32; }
         #overlay { position: fixed; display: none; width: 100%; height: 100%; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.5); z-index: 2; cursor: pointer; }
         #alert-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background-color: #fff; padding: 30px; border-radius: 10px; z-index: 3; text-align: center; border: 5px solid red; }
         #alert-modal h2 { margin-top: 0; color: red; }
@@ -15,7 +17,7 @@
 </head>
 <body>
     <h1>Painel de Alerta</h1>
-    <p>Status: <span id="status">Desconectado</span></p>
+    <div id="status-box">Status: <span id="status">Iniciando...</span></div>
 
     <div id="overlay"></div>
     <div id="alert-modal">
@@ -28,89 +30,77 @@
 
     <script>
         const statusEl = document.getElementById('status');
+        const statusBox = document.getElementById('status-box');
         const overlay = document.getElementById('overlay');
         const alertModal = document.getElementById('alert-modal');
         const alertMessage = document.getElementById('alert-message');
         const sirenSound = document.getElementById('siren-sound');
 
-        // --- Conexão WebSocket ---
-        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-        const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
+        function connect() {
+            console.log("Tentando conectar ao WebSocket...");
+            statusBox.className = 'status-box status-disconnected';
+            statusEl.textContent = 'Conectando...';
 
-        ws.onopen = () => {
-            statusEl.textContent = "Conectado";
-            statusEl.style.color = "green";
-        };
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
 
-        ws.onclose = () => {
-            statusEl.textContent = "Desconectado. Tentando reconectar...";
-            statusEl.style.color = "red";
-            // Tenta reconectar a cada 3 segundos
-            setTimeout(() => window.location.reload(), 3000);
-        };
+            ws.onopen = () => {
+                console.log("WebSocket Conectado!");
+                statusBox.className = 'status-box status-connected';
+                statusEl.textContent = "Conectado";
+            };
 
-        ws.onerror = (error) => {
-            console.error("WebSocket Error:", error);
-            statusEl.textContent = "Erro na conexão";
-        };
+            // --- ATUALIZAÇÃO IMPORTANTE AQUI ---
+            ws.onclose = (event) => {
+                console.error("WebSocket Desconectado!");
+                statusBox.className = 'status-box status-disconnected';
+                
+                // Mostra o motivo do fechamento no console
+                if (event.wasClean) {
+                    statusEl.textContent = `Desconectado. Código: ${event.code}, Motivo: ${event.reason}`;
+                } else {
+                    // Ex: o processo do servidor foi morto ou a rede caiu
+                    statusEl.textContent = `Conexão perdida (código: ${event.code}). Verifique o console (F12). Tentando reconectar em 5s...`;
+                }
+                console.log('Close event:', event);
 
-        // A parte mais importante: ouvir mensagens do servidor
-        ws.onmessage = (event) => {
-            const data = JSON.parse(event.data);
-            console.log("Comando recebido:", data);
+                // Tenta reconectar após um tempo, em vez de recarregar a página
+                setTimeout(connect, 5000);
+            };
 
-            // Decide o que fazer com base na ação recebida
-            switch (data.action) {
-                case 'speak':
-                    falar(data.payload);
-                    break;
-                case 'alert':
-                    mostrarAlerta(data.payload);
-                    break;
-                case 'siren':
-                    if (data.payload === 'play') {
-                        tocarSirene();
-                    } else if (data.payload === 'stop') {
-                        pararSirene();
-                    }
-                    break;
-            }
-        };
+            ws.onerror = (error) => {
+                console.error("Erro no WebSocket:", error);
+                statusEl.textContent = "Erro na conexão.";
+            };
 
-        // --- Funções de Ação do Frontend ---
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                console.log("Comando recebido:", data);
 
-        function falar(texto) {
-            // Usa a API de Fala do Navegador
-            if ('speechSynthesis' in window) {
-                const utterance = new SpeechSynthesisUtterance(texto);
-                utterance.lang = 'pt-BR';
-                window.speechSynthesis.speak(utterance);
-            } else {
-                console.error("Navegador não suporta Text-to-Speech.");
-            }
+                switch (data.action) {
+                    case 'speak':
+                        falar(data.payload);
+                        break;
+                    case 'alert':
+                        mostrarAlerta(data.payload);
+                        break;
+                    case 'siren':
+                        if (data.payload === 'play') tocarSirene();
+                        else if (data.payload === 'stop') pararSirene();
+                        break;
+                }
+            };
         }
 
-        function mostrarAlerta(mensagem) {
-            alertMessage.textContent = mensagem;
-            overlay.style.display = 'block';
-            alertModal.style.display = 'block';
-        }
+        // Funções de ação (falar, mostrarAlerta, etc.) permanecem as mesmas
+        function falar(texto) { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(texto); u.lang = 'pt-BR'; window.speechSynthesis.speak(u); } }
+        function mostrarAlerta(mensagem) { alertMessage.textContent = mensagem; overlay.style.display = 'block'; alertModal.style.display = 'block'; }
+        function fecharAlerta() { overlay.style.display = 'none'; alertModal.style.display = 'none'; pararSirene(); }
+        function tocarSirene() { sirenSound.play().catch(e => console.error("Erro ao tocar sirene:", e)); }
+        function pararSirene() { sirenSound.pause(); sirenSound.currentTime = 0; }
 
-        function fecharAlerta() {
-            overlay.style.display = 'none';
-            alertModal.style.display = 'none';
-            pararSirene(); // Opcional: parar a sirene ao fechar o modal
-        }
-
-        function tocarSirene() {
-            sirenSound.play().catch(e => console.error("Erro ao tocar sirene:", e));
-        }
-        
-        function pararSirene() {
-            sirenSound.pause();
-            sirenSound.currentTime = 0; // Reinicia o áudio
-        }
-
+        // Inicia a primeira conexão
+        connect();
     </script>
 </body>
 </html>
