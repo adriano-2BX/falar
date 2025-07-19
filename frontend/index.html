@@ -3,142 +3,162 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Painel de Monitoramento</title>
-    <style>
-        body { font-family: sans-serif; background-color: #2c3e50; color: #ecf0f1; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        h1 { text-align: center; }
+    <title>System Status Dashboard</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
 
-        /* Estilos do Painel de Servidores */
-        #dashboard {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-            gap: 15px;
-            padding: 20px;
-            background-color: #34495e;
-            border-radius: 8px;
-            margin-bottom: 30px;
-        }
-        .server-box {
-            background-color: #2ecc71; /* Cor padrão: verde (normal) */
-            color: #fff;
-            padding: 20px;
-            border-radius: 5px;
-            text-align: center;
-            font-weight: bold;
-            font-size: 1.1em;
-            transition: background-color 0.3s ease, transform 0.2s ease;
-            border: 2px solid transparent;
-        }
-        .server-box .server-name { font-size: 0.8em; opacity: 0.8; }
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vue3-apexcharts"></script>
 
-        /* Estilos dos Status */
-        .server-normal { background-color: #27ae60; } /* Verde */
-        .server-overloaded { background-color: #f1c40f; color: #333; } /* Amarelo */
-        .server-down { background-color: #e74c3c; } /* Vermelho */
-
-        /* Animação de Piscar */
-        .blinking {
-            animation: blinker 1s linear infinite;
+    <style type="text/tailwindcss">
+        /* Podemos adicionar estilos customizados e animações aqui */
+        @layer utilities {
+            .animate-pulse-slow {
+                animation: pulse-slow 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+            }
+            @keyframes pulse-slow {
+                50% {
+                    opacity: .8;
+                }
+            }
         }
-        @keyframes blinker {
-            50% { opacity: 0.3; }
-        }
-
-        /* Outros estilos (status, modal, etc.) */
-        #status-box { padding: 10px; border-radius: 5px; text-align: center; margin-bottom: 20px; }
-        .status-connected { background-color: #27ae60; }
-        .status-disconnected { background-color: #e74c3c; }
-        #init-overlay { position: fixed; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; top: 0; left: 0; background-color: rgba(0,0,0,0.7); z-index: 10; }
-        #init-button { padding: 20px 40px; font-size: 1.5em; cursor: pointer; }
     </style>
 </head>
-<body>
-    <div id="init-overlay">
-        <button id="init-button">Iniciar Sistema</button>
-    </div>
+<body class="bg-gray-900">
 
-    <div class="container">
-        <h1>Painel de Monitoramento de Servidores</h1>
-        <div id="status-box">Status: <span id="status">Aguardando início...</span></div>
+    <div id="app" class="min-h-screen p-4 sm:p-8">
         
-        <div id="dashboard"></div>
+        <h1 class="text-4xl font-bold text-center text-gray-100 mb-8 tracking-wider">
+            SYSTEM STATUS DASHBOARD
+        </h1>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+            <server-card v-for="server in servers" :key="server.id" :server="server"></server-card>
+        </div>
+
     </div>
-    
-    <audio id="siren-sound" src="/static/sirene.mp3" loop></audio>
+
     <script>
-        const dashboard = document.getElementById('dashboard');
-        const TOTAL_SERVERS = 20;
+        // Desestruturamos as funções que vamos usar do objeto global 'Vue'
+        const { createApp, ref, onMounted, computed } = Vue;
+        
+        // Criamos nossa aplicação Vue
+        const app = createApp({
+            setup() {
+                // 'ref' cria uma variável reativa. Qualquer mudança aqui, a UI atualiza automaticamente.
+                const servers = ref([]);
 
-        // --- LÓGICA DO PAINEL ---
-        function createServerGrid() {
-            for (let i = 1; i <= TOTAL_SERVERS; i++) {
-                const serverDiv = document.createElement('div');
-                serverDiv.id = `server-${i}`;
-                // Todos começam com o status 'normal'
-                serverDiv.className = 'server-box server-normal';
-                
-                const serverName = document.createElement('div');
-                serverName.className = 'server-name';
-                serverName.textContent = `Servidor #${i}`;
-                
-                serverDiv.appendChild(serverName);
-                dashboard.appendChild(serverDiv);
-            }
-        }
-
-        function updateServer(id, status) {
-            const serverDiv = document.getElementById(`server-${id}`);
-            if (!serverDiv) return;
-
-            // Limpa as classes de status e piscar antigas
-            serverDiv.classList.remove('server-normal', 'server-overloaded', 'server-down', 'blinking');
-
-            // Adiciona a nova classe de status
-            serverDiv.classList.add(`server-${status}`);
-
-            // Adiciona a classe de piscar se o status não for 'normal'
-            if (status === 'overloaded' || status === 'down') {
-                serverDiv.classList.add('blinking');
-            }
-        }
-
-        // --- LÓGICA DE INICIALIZAÇÃO E CONEXÃO ---
-        document.getElementById('init-button').addEventListener('click', startSystem);
-
-        function startSystem() {
-            document.getElementById('init-overlay').style.display = 'none';
-            createServerGrid(); // Cria o painel de servidores
-            falar(''); // "Acorda" a API de fala
-
-            const eventSource = new EventSource("/stream");
-            
-            eventSource.onopen = () => { /* ... (lógica de status conectado) ... */ };
-            eventSource.onerror = () => { /* ... (lógica de status desconectado) ... */ };
-            
-            eventSource.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                
-                // Roteia a ação para a função correta
-                switch (data.action) {
-                    case 'update_server':
-                        updateServer(data.payload.id, data.payload.status);
-                        break;
-                    case 'speak':
-                        falar(data.payload);
-                        break;
-                    case 'alert':
-                        // A função de alerta pode ser adicionada aqui se você mantiver o modal
-                        break;
-                    case 'siren':
-                        // ...
-                        break;
+                // Inicializa o painel com 20 servidores em estado padrão
+                for (let i = 1; i <= 20; i++) {
+                    servers.value.push({
+                        id: i,
+                        name: `SRV-${String(i).padStart(2, '0')}`,
+                        status: 'normal',
+                        cpu_load: 0,
+                        ram_usage: 0,
+                        disk_space: 0,
+                        uptime: "initializing...",
+                        last_error: null
+                    });
                 }
-            };
-        }
 
-        // Função de fala (sem alterações)
-        function falar(texto) { if ('speechSynthesis' in window) { /* ... */ } }
+                // 'onMounted' é executado quando a aplicação é carregada na tela
+                onMounted(() => {
+                    // A URL deve apontar para o seu backend FastAPI
+                    // Se estiver testando localmente, use http://localhost:8000/stream
+                    const eventSource = new EventSource('/stream');
+
+                    eventSource.onmessage = (event) => {
+                        console.log("SSE Event Received:", event.data);
+                        const data = JSON.parse(event.data);
+
+                        if (data.action === 'update_server') {
+                            const serverIndex = servers.value.findIndex(s => s.id === data.payload.id);
+                            if (serverIndex !== -1) {
+                                // Atualiza os dados do servidor encontrado. Vue cuida do resto!
+                                servers.value[serverIndex] = data.payload;
+                            }
+                        }
+                    };
+
+                    eventSource.onerror = (err) => {
+                        console.error("EventSource failed:", err);
+                    };
+                });
+
+                // Expomos a variável 'servers' para o template HTML
+                return {
+                    servers
+                };
+            }
+        });
+        
+        // --- DEFINIÇÃO DO COMPONENTE 'ServerCard' ---
+        app.component('ServerCard', {
+            // Este componente usa o 'vue3-apexcharts' que carregamos via CDN
+            components: {
+                apexchart: VueApexCharts,
+            },
+            props: ['server'],
+            setup(props) {
+                // Lógica para mudar a classe CSS principal do card
+                const cardClasses = computed(() => ({
+                    'bg-red-500/80 border-red-400 animate-pulse': props.server.status === 'down',
+                    'bg-yellow-500/80 border-yellow-400 animate-pulse-slow': props.server.status === 'overloaded',
+                    'bg-gray-800/60 border-gray-700': props.server.status === 'normal'
+                }));
+                
+                // Opções para o gráfico
+                const chartOptions = computed(() => ({ /* ... opções do gráfico ... */ }));
+                const series = computed(() => [props.server.cpu_load || 0]);
+
+                return { cardClasses, chartOptions, series };
+            },
+            // O template HTML do nosso componente
+            template: `
+                <div class="p-4 rounded-xl shadow-lg text-white transform hover:-translate-y-1 hover:shadow-2xl transition-all duration-300 border backdrop-blur-sm"
+                    :class="cardClasses">
+                    
+                    <div class="flex justify-between items-center mb-3">
+                        <h3 class="font-bold text-lg">{{ server.name }}</h3>
+                        <span class="text-xs font-mono px-2 py-1 rounded"
+                            :class="{
+                                'bg-green-500/20 text-green-300': server.status === 'normal',
+                                'bg-yellow-500/20 text-yellow-300': server.status === 'overloaded',
+                                'bg-red-500/20 text-red-300': server.status === 'down'
+                            }">
+                            {{ server.status.toUpperCase() }}
+                        </span>
+                    </div>
+
+                    <div class="text-center my-4 opacity-90">
+                        <apexchart type="radialBar" height="130" :options="chartOptions" :series="series"></apexchart>
+                        <div class="text-center -mt-4 text-xs font-semibold tracking-wider">CPU LOAD</div>
+                    </div>
+                    
+                    <div class="text-xs space-y-1 opacity-80 font-mono">
+                        <div class="flex justify-between border-b border-gray-700/50 py-1">
+                            <span>RAM</span> <span>{{ server.ram_usage || 0 }}%</span>
+                        </div>
+                        <div class="flex justify-between border-b border-gray-700/50 py-1">
+                            <span>Disco</span> <span>{{ server.disk_space || 0 }}%</span>
+                        </div>
+                        <div class="flex justify-between pt-1">
+                            <span>Uptime</span> <span>{{ server.uptime }}</span>
+                        </div>
+                    </div>
+
+                    <div v-if="server.last_error" class="mt-4 text-center bg-red-900/50 p-2 rounded-lg text-xs font-mono">
+                        ⚠️ {{ server.last_error }}
+                    </div>
+                </div>
+            `
+        });
+        
+        // Monta a aplicação Vue na div #app
+        app.mount('#app');
+
     </script>
 </body>
 </html>
