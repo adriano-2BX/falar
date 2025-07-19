@@ -3,47 +3,45 @@
 import json
 import logging
 from typing import List
-
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse  # <-- 1. IMPORTAÇÃO ADICIONADA
+from fastapi.responses import FileResponse
 
+# Configuração básica de logging
 logging.basicConfig(level=logging.INFO)
+
+# Criação da aplicação FastAPI
 app = FastAPI()
 
-
-# --- ATUALIZAÇÃO IMPORTANTE ---
-# 2. ROTA EXPLÍCITA PARA A PÁGINA INICIAL E HEALTH CHECK
-# Esta rota captura os acessos à raiz "/" e responde diretamente com o arquivo index.html.
-# Isso garante uma resposta rápida e um status 200 OK para o health check do EasyPanel.
+# Rota explícita para a página inicial e Health Check
 @app.get("/", response_class=FileResponse)
 async def read_index():
     return "frontend/index.html"
 
-
-# --- Endpoint de Health Check (Manter para garantir) ---
-# Mesmo que o EasyPanel não permita configurar, não custa nada manter esta rota.
+# Endpoint de Health Check secundário
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
 
-
-# --- O resto do código permanece o mesmo ---
-
+# Gerenciador de conexões WebSocket
 class ConnectionManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
+
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
+
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
+
     async def broadcast(self, message: str):
         for connection in self.active_connections:
             await connection.send_text(message)
 
 manager = ConnectionManager()
 
+# Endpoint do WebSocket
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -58,6 +56,7 @@ async def websocket_endpoint(websocket: WebSocket):
         logging.error(f"Erro inesperado na conexão com {websocket.client.host}: {e}")
         manager.disconnect(websocket)
 
+# Endpoints da API
 @app.post("/api/falar")
 async def api_falar(body: dict):
     texto = body.get("texto", "Nenhum texto fornecido")
@@ -80,8 +79,5 @@ async def api_parar_sirene():
     await manager.broadcast(json.dumps(mensagem))
     return {"status": "comando para parar sirene enviado"}
 
-
-# --- 3. ATUALIZAÇÃO NO MOUNT ---
-# Agora o mount serve apenas para os *outros* arquivos da pasta, como sirene.mp3.
-# A rota "/" já foi capturada pela função read_index() acima.
-app.mount("/", StaticFiles(directory="frontend"), name="static")
+# Mount para servir arquivos estáticos como sirene.mp3
+app.mount("/static", StaticFiles(directory="frontend"), name="static")
