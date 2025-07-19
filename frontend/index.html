@@ -19,6 +19,8 @@
     <h1>Painel de Alerta</h1>
     <div id="status-box">Status: <span id="status">Iniciando...</span></div>
 
+    <audio id="siren-sound" src="/static/sirene.mp3" loop></audio>
+    
     <div id="overlay"></div>
     <div id="alert-modal">
         <h2>ALERTA!</h2>
@@ -26,81 +28,56 @@
         <button onclick="fecharAlerta()">Fechar</button>
     </div>
 
-    <audio id="siren-sound" src="/sirene.mp3" loop></audio>
-
     <script>
         const statusEl = document.getElementById('status');
         const statusBox = document.getElementById('status-box');
-        const overlay = document.getElementById('overlay');
-        const alertModal = document.getElementById('alert-modal');
-        const alertMessage = document.getElementById('alert-message');
-        const sirenSound = document.getElementById('siren-sound');
+        
+        console.log("Iniciando conexão com Server-Sent Events...");
+        
+        // --- ATUALIZAÇÃO IMPORTANTE AQUI ---
+        // Trocamos WebSocket por EventSource
+        const eventSource = new EventSource("/stream");
 
-        function connect() {
-            console.log("Tentando conectar ao WebSocket...");
+        // Evento quando a conexão é aberta com sucesso
+        eventSource.onopen = () => {
+            console.log("Conexão SSE estabelecida.");
+            statusBox.className = 'status-box status-connected';
+            statusEl.textContent = "Conectado";
+        };
+
+        // Evento quando uma nova mensagem chega do servidor
+        eventSource.onmessage = (event) => {
+            // A mensagem já vem em 'event.data'
+            const data = JSON.parse(event.data);
+            console.log("Comando SSE recebido:", data);
+
+            switch (data.action) {
+                case 'speak':
+                    falar(data.payload);
+                    break;
+                case 'alert':
+                    mostrarAlerta(data.payload);
+                    break;
+                case 'siren':
+                    if (data.payload === 'play') tocarSirene();
+                    else if (data.payload === 'stop') pararSirene();
+                    break;
+            }
+        };
+
+        // Evento se ocorrer um erro. O navegador tentará reconectar automaticamente.
+        eventSource.onerror = (err) => {
+            console.error("Erro no EventSource:", err);
             statusBox.className = 'status-box status-disconnected';
-            statusEl.textContent = 'Conectando...';
-
-            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const ws = new WebSocket(`${wsProtocol}//${window.location.host}/ws`);
-
-            ws.onopen = () => {
-                console.log("WebSocket Conectado!");
-                statusBox.className = 'status-box status-connected';
-                statusEl.textContent = "Conectado";
-            };
-
-            // --- ATUALIZAÇÃO IMPORTANTE AQUI ---
-            ws.onclose = (event) => {
-                console.error("WebSocket Desconectado!");
-                statusBox.className = 'status-box status-disconnected';
-                
-                // Mostra o motivo do fechamento no console
-                if (event.wasClean) {
-                    statusEl.textContent = `Desconectado. Código: ${event.code}, Motivo: ${event.reason}`;
-                } else {
-                    // Ex: o processo do servidor foi morto ou a rede caiu
-                    statusEl.textContent = `Conexão perdida (código: ${event.code}). Verifique o console (F12). Tentando reconectar em 5s...`;
-                }
-                console.log('Close event:', event);
-
-                // Tenta reconectar após um tempo, em vez de recarregar a página
-                setTimeout(connect, 5000);
-            };
-
-            ws.onerror = (error) => {
-                console.error("Erro no WebSocket:", error);
-                statusEl.textContent = "Erro na conexão.";
-            };
-
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                console.log("Comando recebido:", data);
-
-                switch (data.action) {
-                    case 'speak':
-                        falar(data.payload);
-                        break;
-                    case 'alert':
-                        mostrarAlerta(data.payload);
-                        break;
-                    case 'siren':
-                        if (data.payload === 'play') tocarSirene();
-                        else if (data.payload === 'stop') pararSirene();
-                        break;
-                }
-            };
-        }
-
-        // Funções de ação (falar, mostrarAlerta, etc.) permanecem as mesmas
+            statusEl.textContent = "Conexão perdida. Tentando reconectar...";
+        };
+        
+        // As funções de ação não mudam
         function falar(texto) { if ('speechSynthesis' in window) { const u = new SpeechSynthesisUtterance(texto); u.lang = 'pt-BR'; window.speechSynthesis.speak(u); } }
-        function mostrarAlerta(mensagem) { alertMessage.textContent = mensagem; overlay.style.display = 'block'; alertModal.style.display = 'block'; }
-        function fecharAlerta() { overlay.style.display = 'none'; alertModal.style.display = 'none'; pararSirene(); }
-        function tocarSirene() { sirenSound.play().catch(e => console.error("Erro ao tocar sirene:", e)); }
-        function pararSirene() { sirenSound.pause(); sirenSound.currentTime = 0; }
-
-        // Inicia a primeira conexão
-        connect();
+        function mostrarAlerta(mensagem) { document.getElementById('alert-message').textContent = mensagem; document.getElementById('overlay').style.display = 'block'; document.getElementById('alert-modal').style.display = 'block'; }
+        function fecharAlerta() { document.getElementById('overlay').style.display = 'none'; document.getElementById('alert-modal').style.display = 'none'; pararSirene(); }
+        function tocarSirene() { document.getElementById('siren-sound').play().catch(e => console.error("Erro ao tocar sirene:", e)); }
+        function pararSirene() { const s = document.getElementById('siren-sound'); s.pause(); s.currentTime = 0; }
     </script>
 </body>
 </html>
