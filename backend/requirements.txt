@@ -1,5 +1,5 @@
-# /falar/backend/requirements.txt
-
+# /meu_projeto/backend/requirements.txt
 fastapi
 uvicorn
 websockets
+sse-starlette
